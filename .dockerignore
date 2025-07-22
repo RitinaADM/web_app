@@ -1,0 +1,70 @@
+# Игнорируем файлы, не нужные в Docker-образе
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.egg-info/
+*.egg
+
+# Виртуальные окружения
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp
+*~
+.#*
+
+# Файлы редакторов
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Файлы окружения
+services/user-service/.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Docker-файлы
+docker-compose.override.yml
+*.dockerignore
+*.gitignore
+
+# MongoDB и Redis данные
+mongo-data/
+redis-data/
+
+# Тестовые файлы
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+tox/
+nox/
+*.tox/
+
+# Локальные директории и файлы
+.git/
+README.md
+LICENSE
+docs/
+tests/
+*.md
+
+# macOS and Windows
+*.DS_Store
+Thumbs.db

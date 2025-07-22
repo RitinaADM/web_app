@@ -1,0 +1,1552 @@
+# Содержимое проекта из директории: C:\Users\dev\Documents\web_app
+
+## Файл: .dockerignore
+```text
+# Игнорируем файлы, не нужные в Docker-образе
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.egg-info/
+*.egg
+
+# Виртуальные окружения
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp
+*~
+.#*
+
+# Файлы редакторов
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Файлы окружения
+services/user-service/.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Docker-файлы
+docker-compose.override.yml
+*.dockerignore
+*.gitignore
+
+# MongoDB и Redis данные
+mongo-data/
+redis-data/
+
+# Тестовые файлы
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+tox/
+nox/
+*.tox/
+
+# Локальные директории и файлы
+.git/
+.gitignore
+README.md
+LICENSE
+docs/
+tests/
+*.md
+
+# Сгенерированные файлы gRPC (если копируются в образ, можно включить)
+# services/user-service/app/infrastructure/adapters/inbound/grpc/*_pb2.py
+# services/user-service/app/infrastructure/adapters/inbound/grpc/*_pb2_grpc.py
+```
+
+## Файл: .gitignore
+```text
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Виртуальные окружения
+env/
+venv/
+ENV/
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp
+*~
+
+# Файлы редакторов
+.vscode/
+.idea/
+
+# Сгенерированные файлы gRPC
+app/infrastructure/adapters/inbound/grpc/*_pb2.py
+app/infrastructure/adapters/inbound/grpc/*_pb2_grpc.py
+
+# Файлы окружения
+.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Тестовые файлы
+.coverage
+.pytest_cache/
+```
+
+## Файл: docker-compose.yml
+```text
+services:
+  user-service:
+    build:
+      context: ./
+      dockerfile: services/user-service/Dockerfile
+    ports:
+      - "50055:50051"
+    env_file:
+      - ./services/user-service/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - app-network
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27027:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7.0
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - user-service
+    networks:
+      - app-network
+
+volumes:
+  mongo-data:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+## Пустая директория: gateway
+[Папка не содержит файлов]
+
+## Файл: nginx\default.conf
+```text
+server {
+    listen 80 http2;
+
+    location / {
+        grpc_pass grpc://user-service:50051;
+    }
+}
+```
+
+## Файл: proto\user.proto
+```text
+syntax = "proto3";
+
+package user;
+
+service AdminService {
+  rpc CreateUser (CreateUserRequest) returns (UserResponse);
+  rpc GetUser (GetUserRequest) returns (UserResponse);
+  rpc UpdateUser (UpdateUserRequest) returns (UserResponse);
+  rpc DeleteUser (GetUserRequest) returns (UserDeletedResponse);
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string name = 2;
+  string password = 3;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message UpdateUserRequest {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message UserResponse {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string created_at = 4;
+}
+
+message UserDeletedResponse {
+  bool success = 1;
+}
+
+
+service UserService {
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc GetMyProfile (EmptyRequest) returns (UserResponse);
+  rpc UpdateMyName (UpdateMyNameRequest) returns (UserResponse);
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+message LoginResponse {
+  string token = 1;
+}
+
+message EmptyRequest {} // Новый пустой запрос для GetMyProfile
+
+
+message UpdateMyNameRequest {
+  string name = 1;
+}
+
+
+```
+
+## Пустая директория: services
+[Папка не содержит файлов]
+
+## Пустая директория: services\auth-service
+[Папка не содержит файлов]
+
+## Файл: services\user-service\.env
+```text
+MONGO_URI=mongodb://mongo:27017
+MONGO_DB=user_service
+MONGO_UUID_REPRESENTATION=standard
+JWT_SECRET_KEY=your-secure-secret-key-with-at-least-32-characters
+GRPC_PORT=50051
+REDIS_URI=redis://redis:6379/0
+REDIS_TTL=3600
+```
+
+## Файл: services\user-service\Dockerfile
+```text
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Обновляем pip для избежания проблем с установкой
+RUN pip install --no-cache-dir --upgrade pip
+
+COPY services/user-service/requirements.txt .
+# Устанавливаем зависимости без кэша
+RUN pip install --no-cache-dir -r requirements.txt
+# Проверяем, что pymongo версии 4.13.2 установлен
+RUN pip show pymongo | grep Version | grep 4.13.2 || exit 1
+RUN pip show redis | grep Version | grep 5.0.8 || exit 1
+
+# Копируем proto файл и исходный код
+COPY proto/ /app/proto/
+COPY services/user-service/ /app/
+
+# Генерируем протофайлы
+RUN python -m grpc_tools.protoc -I./proto --python_out=./app/infrastructure/adapters/inbound/grpc --grpc_python_out=./app/infrastructure/adapters/inbound/grpc ./proto/user.proto
+
+# Исправляем импорт в user_pb2_grpc.py
+RUN sed -i 's/import user_pb2 as user__pb2/from . import user_pb2 as user__pb2/' ./app/infrastructure/adapters/inbound/grpc/user_pb2_grpc.py
+
+CMD ["python", "app/main.py"]
+```
+
+## Файл: services\user-service\requirements.txt
+```text
+grpcio==1.71.0
+grpcio-tools==1.71.0
+grpcio-reflection==1.71.0
+pymongo==4.13.2
+pydantic[email]==2.7.0
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+pyjwt==2.8.0
+bcrypt==4.1.2
+dishka==1.6.0
+structlog==24.4.0
+redis==5.0.8
+```
+
+## Файл: services\user-service\app\config.py
+```text
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    mongo_uri: str = Field(..., env="MONGO_URI")
+    mongo_db: str = Field("user_service", env="MONGO_DB")
+    mongo_uuid_representation: str = Field("standard", env="MONGO_UUID_REPRESENTATION")
+    jwt_secret_key: str = Field(..., env="JWT_SECRET_KEY", min_length=32)
+    grpc_port: int = Field(50051, env="GRPC_PORT")
+    redis_uri: str = Field("redis://redis:6379/0", env="REDIS_URI")  # Добавляем Redis URI
+    redis_ttl: int = Field(3600, env="REDIS_TTL")  # Время жизни кэша в секундах (1 час)
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+settings = Settings()
+```
+
+## Файл: services\user-service\app\main.py
+```text
+import structlog
+import asyncio
+from infrastructure.adapters.inbound.grpc.grpc_server import serve
+import logging
+
+# Настраиваем стандартный Python-логгер для вывода в stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",  # structlog будет форматировать сообщение в JSON
+)
+
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.JSONRenderer(ensure_ascii=False),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+if __name__ == "__main__":
+    asyncio.run(serve())
+```
+
+## Файл: services\user-service\app\application\admin_service_impl.py
+```text
+import bcrypt
+from uuid import UUID, uuid4
+from datetime import datetime
+from typing import Optional
+from domain.ports.inbound.admin_usecase_port import AdminUseCasePort
+from domain.ports.outbound.user_repository_port import UserRepositoryPort
+from domain.models.user import User
+from domain.exceptions import UserNotFoundError, InvalidInputError
+from application.dto.user_dto import CreateUserDTO, UpdateUserDTO, UserIdDTO, UserResponseDTO
+from application.utils.logging_utils import log_execution_time, filter_sensitive_data
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class AdminService(AdminUseCasePort):
+    def __init__(self, repo: UserRepositoryPort):
+        self.repo = repo
+        self.logger = logger.bind(service="AdminService")
+
+    def _hash_password(self, password: str) -> str:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    @log_execution_time
+    async def create_user(self, user_dto: CreateUserDTO, request_id: str) -> UserResponseDTO:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            # Проверяем, существует ли пользователь с таким email
+            existing_user = await self.repo.get_by_email(user_dto.email, request_id)
+            if existing_user:
+                logger.error("Email already exists", email=user_dto.email)
+                raise InvalidInputError(f"Email {user_dto.email} уже существует")
+
+            # Назначаем роль: admin для определённых email, иначе user
+            role = "admin" if user_dto.email == "admin@example.com" else "user"
+            logger.info("Creating user", input_data=filter_sensitive_data(user_dto.dict()), role=role)
+            user = User(
+                id=uuid4(),
+                email=user_dto.email,
+                name=user_dto.name,
+                hashed_password=self._hash_password(user_dto.password),
+                created_at=datetime.utcnow(),
+                role=role
+            )
+            created_user = await self.repo.create(user, request_id)
+            response = UserResponseDTO(
+                id=created_user.id,
+                email=created_user.email,
+                name=created_user.name,
+                created_at=created_user.created_at
+            )
+            logger.info("User created successfully", user_id=str(user.id), response=response.dict())
+            return response
+        except InvalidInputError as e:
+            logger.error("Invalid input for creating user", error=str(e), email=user_dto.email)
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in creating user", error=str(e), email=user_dto.email)
+            raise RuntimeError(f"Unexpected error in creating user: {str(e)}")
+
+    @log_execution_time
+    async def get_user(self, user_id_dto: UserIdDTO, request_id: str) -> UserResponseDTO:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Fetching user", user_id=str(user_id_dto.id))
+            user = await self.repo.get_by_id(user_id_dto.id, request_id)
+            if not user:
+                logger.warning("User not found", user_id=str(user_id_dto.id))
+                raise UserNotFoundError(f"User with ID {user_id_dto.id} not found")
+            response = UserResponseDTO(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                created_at=user.created_at
+            )
+            logger.info("User fetched successfully", response=response.dict())
+            return response
+        except UserNotFoundError as e:
+            logger.error("User not found", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for getting user", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in getting user", error=str(e), user_id=str(user_id_dto.id))
+            raise RuntimeError(f"Unexpected error in getting user: {str(e)}")
+
+    @log_execution_time
+    async def update_user(self, user_id: UUID, user_dto: UpdateUserDTO, request_id: str) -> UserResponseDTO:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Updating user", user_id=str(user_id), input_data=user_dto.dict())
+            user = await self.repo.get_by_id(user_id, request_id)
+            if not user:
+                logger.warning("User not found", user_id=str(user_id))
+                raise UserNotFoundError(f"User with ID {user_id} not found")
+            user.set_name(user_dto.name)
+            user.set_email(user_dto.email)
+            updated_user = await self.repo.update(user, request_id)
+            response = UserResponseDTO(
+                id=updated_user.id,
+                email=updated_user.email,
+                name=updated_user.name,
+                created_at=updated_user.created_at
+            )
+            logger.info("User updated successfully", response=response.dict())
+            return response
+        except UserNotFoundError as e:
+            logger.error("User not found", error=str(e), user_id=str(user_id))
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for updating user", error=str(e), user_id=str(user_id))
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in updating user", error=str(e), user_id=str(user_id))
+            raise RuntimeError(f"Unexpected error in updating user: {str(e)}")
+
+    @log_execution_time
+    async def delete_user(self, user_id_dto: UserIdDTO, request_id: str) -> bool:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Deleting user", user_id=str(user_id_dto.id))
+            user = await self.repo.get_by_id(user_id_dto.id, request_id)
+            if not user:
+                logger.warning("User not found", user_id=str(user_id_dto.id))
+                raise UserNotFoundError(f"User with ID {user_id_dto.id} not found")
+            await self.repo.delete(user_id_dto.id, request_id)
+            logger.info("User deleted successfully", user_id=str(user_id_dto.id))
+            return True
+        except UserNotFoundError as e:
+            logger.error("User not found", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for deleting user", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in deleting user", error=str(e), user_id=str(user_id_dto.id))
+            raise RuntimeError(f"Unexpected error in deleting user: {str(e)}")
+```
+
+## Файл: services\user-service\app\application\base_crud_service.py
+```text
+from typing import Generic, TypeVar, Optional
+from domain.ports.outbound.base_repository import AbstractRepository
+
+T = TypeVar("T")
+ID = TypeVar("ID")
+
+class BaseCrudService(Generic[T, ID]):
+    def __init__(self, repo: AbstractRepository[T, ID]):
+        self.repo = repo
+
+    async def get_by_id(self, id: ID, request_id: str) -> Optional[T]:
+        return await self.repo.get_by_id(id, request_id)
+
+    async def create(self, entity: T, request_id: str) -> T:
+        return await self.repo.create(entity, request_id)
+
+    async def update(self, entity: T, request_id: str) -> T:
+        return await self.repo.update(entity, request_id)
+
+    async def delete(self, id: ID, request_id: str) -> None:
+        await self.repo.delete(id, request_id)
+```
+
+## Файл: services\user-service\app\application\user_service_impl.py
+```text
+import bcrypt
+import jwt
+from uuid import UUID
+from datetime import datetime, timedelta
+from typing import Optional
+from domain.ports.inbound.user_service_port import UserServicePort
+from domain.ports.outbound.user_repository_port import UserRepositoryPort
+from domain.models.user import User
+from domain.exceptions import AuthenticationError, UserNotFoundError, InvalidInputError
+from application.dto.user_dto import LoginDTO, UserIdDTO, UpdateNameDTO, UserResponseDTO
+from application.utils.logging_utils import log_execution_time, filter_sensitive_data
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class UserService(UserServicePort):
+    def __init__(self, repo: UserRepositoryPort, jwt_secret_key: str):
+        self.repo = repo
+        self.secret_key = jwt_secret_key
+        self.logger = logger.bind(service="UserService")
+
+    def _hash_password(self, password: str) -> str:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    def _verify_password(self, password: str, hashed_password: str) -> bool:
+        return bcrypt.checkpw(password.encode(), hashed_password.encode())
+
+    @log_execution_time
+    async def login(self, login_dto: LoginDTO, request_id: str) -> str:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Processing login", email=login_dto.email)
+            user = await self.repo.get_by_email(login_dto.email, request_id)
+            if not user or not self._verify_password(login_dto.password, user.hashed_password):
+                logger.error("Invalid credentials", email=login_dto.email)
+                raise AuthenticationError("Invalid email or password")
+            payload = {
+                "user_id": str(user.id),
+                "role": user.role,  # Добавляем роль в токен
+                "exp": datetime.utcnow() + timedelta(hours=24)
+            }
+            token = jwt.encode(payload, self.secret_key, algorithm="HS256")
+            logger.info("User logged in successfully", user_id=str(user.id), role=user.role)
+            return token
+        except AuthenticationError as e:
+            logger.error("Authentication failed", error=str(e), email=login_dto.email)
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for login", error=str(e), email=login_dto.email)
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in login", error=str(e), email=login_dto.email)
+            raise AuthenticationError(f"Unexpected error in login: {str(e)}")
+
+    @log_execution_time
+    async def get_my_profile(self, user_id_dto: UserIdDTO, request_id: str) -> Optional[UserResponseDTO]:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Fetching user profile", user_id=str(user_id_dto.id))
+            user = await self.repo.get_by_id(user_id_dto.id, request_id)
+            if not user:
+                logger.warning("User not found", user_id=str(user_id_dto.id))
+                raise UserNotFoundError(f"User with ID {user_id_dto.id} not found")
+            response = UserResponseDTO(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                created_at=user.created_at
+            )
+            logger.info("User profile fetched successfully", response=response.dict())
+            return response
+        except UserNotFoundError as e:
+            logger.error("User not found", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for getting profile", error=str(e), user_id=str(user_id_dto.id))
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in getting profile", error=str(e), user_id=str(user_id_dto.id))
+            raise RuntimeError(f"Unexpected error in getting profile: {str(e)}")
+
+    @log_execution_time
+    async def update_my_name(self, user_id: UUID, name_dto: UpdateNameDTO, request_id: str) -> Optional[UserResponseDTO]:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Updating user name", user_id=str(user_id), new_name=name_dto.name)
+            user = await self.repo.get_by_id(user_id, request_id)
+            if not user:
+                logger.warning("User not found", user_id=str(user_id))
+                raise UserNotFoundError(f"User with ID {user_id} not found")
+            user.set_name(name_dto.name)
+            updated_user = await self.repo.update(user, request_id)
+            response = UserResponseDTO(
+                id=updated_user.id,
+                email=updated_user.email,
+                name=updated_user.name,
+                created_at=updated_user.created_at
+            )
+            logger.info("User name updated successfully", response=response.dict())
+            return response
+        except UserNotFoundError as e:
+            logger.error("User not found", error=str(e), user_id=str(user_id))
+            raise
+        except InvalidInputError as e:
+            logger.error("Invalid input for updating name", error=str(e), user_id=str(user_id))
+            raise
+        except Exception as e:
+            logger.error("Unexpected error in updating name", error=str(e), user_id=str(user_id))
+            raise RuntimeError(f"Unexpected error in updating name: {str(e)}")
+```
+
+## Файл: services\user-service\app\application\dto\user_dto.py
+```text
+from pydantic import BaseModel, EmailStr, Field
+from uuid import UUID
+from datetime import datetime
+
+class CreateUserDTO(BaseModel):
+    email: EmailStr
+    name: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=8)
+
+class UpdateUserDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+
+class UpdateNameDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+class LoginDTO(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserIdDTO(BaseModel):
+    id: UUID
+
+class UserResponseDTO(BaseModel):
+    id: UUID
+    email: EmailStr
+    name: str
+    created_at: datetime
+    role: str = "user"  # Добавляем поле role
+
+    class Config:
+        arbitrary_types_allowed = True  # Для поддержки UUID и datetime
+        json_encoders = {
+            UUID: str,  # Преобразуем UUID в строку
+            datetime: lambda dt: dt.isoformat()  # Преобразуем datetime в ISO 8601
+        }
+```
+
+## Файл: services\user-service\app\application\utils\grpc_utils.py
+```text
+from functools import wraps
+import grpc
+from structlog import get_logger
+from pydantic_core import ValidationError
+from domain.exceptions import AuthenticationError, UserNotFoundError, InvalidInputError
+from application.utils.logging_utils import generate_request_id
+
+logger = get_logger(__name__)
+
+def handle_grpc_exceptions(func):
+    """Декоратор для централизованной обработки исключений в gRPC."""
+    @wraps(func)
+    async def wrapper(self, request, context, *args, **kwargs):
+        # Используем request_id из kwargs, если он передан, иначе генерируем новый
+        request_id = kwargs.get('request_id', generate_request_id())
+        logger_with_request = self.logger.bind(request_id=request_id)
+        try:
+            # Передаем request_id в функцию
+            return await func(self, request, context, request_id=request_id)
+        except ValidationError as e:
+            logger_with_request.error(f"Ошибка валидации в {func.__name__}", error=str(e))
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            raise
+        except InvalidInputError as e:
+            logger_with_request.error(f"Недопустимый аргумент в {func.__name__}", error=str(e))
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            raise
+        except UserNotFoundError as e:
+            logger_with_request.warning(f"Пользователь не найден в {func.__name__}", error=str(e))
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details(str(e))
+            raise
+        except AuthenticationError as e:
+            logger_with_request.error(f"Ошибка аутентификации в {func.__name__}", error=str(e))
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details(str(e))
+            raise
+        except Exception as e:
+            logger_with_request.error(f"Неожиданная ошибка в {func.__name__}", error=str(e))
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            raise
+    return wrapper
+```
+
+## Файл: services\user-service\app\application\utils\logging_utils.py
+```text
+import time
+from functools import wraps
+from typing import Callable, TypeVar, Any
+from uuid import uuid4
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+T = TypeVar('T')
+
+def generate_request_id() -> str:
+    """Генерирует уникальный request_id."""
+    return str(uuid4())
+
+def filter_sensitive_data(data: dict) -> dict:
+    """Фильтрует конфиденциальные данные, такие как пароли."""
+    return {k: v for k, v in data.items() if k != "password"}
+
+def log_execution_time(func: Callable[..., T]) -> Callable[..., T]:
+    """Декоратор для логирования времени выполнения функции."""
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs) -> T:
+        start_time = time.perf_counter()
+        request_id = kwargs.get('request_id', generate_request_id())  # Используем переданный request_id
+        logger_with_request = logger.bind(request_id=request_id)
+        try:
+            result = await func(*args, **kwargs)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger_with_request.info(
+                f"Функция {func.__name__} выполнена успешно",
+                duration_ms=f"{duration_ms:.2f}",
+                func_name=func.__name__,
+                module=func.__module__,
+            )
+            return result
+        except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger_with_request.error(
+                f"Функция {func.__name__} завершилась с ошибкой",
+                duration_ms=f"{duration_ms:.2f}",
+                func_name=func.__name__,
+                module=func.__module__,
+                error=str(e),
+            )
+            raise
+    return async_wrapper
+```
+
+## Файл: services\user-service\app\domain\exceptions.py
+```text
+class AuthenticationError(Exception):
+    """Raised when authentication fails."""
+    pass
+
+class UserNotFoundError(Exception):
+    """Raised when a user is not found."""
+    pass
+
+class InvalidInputError(Exception):
+    """Raised when input data is invalid."""
+    pass
+```
+
+## Файл: services\user-service\app\domain\models\user.py
+```text
+from datetime import datetime
+from uuid import UUID
+
+class User:
+    def __init__(self, id: UUID, email: str, name: str, hashed_password: str, created_at: datetime, role: str = "user"):
+        self._id = id
+        self._email = email
+        self._name = name
+        self._hashed_password = hashed_password
+        self._created_at = created_at
+        self._role = role  # Добавляем поле role с дефолтным значением "user"
+
+    @property
+    def id(self) -> UUID:
+        return self._id
+
+    @property
+    def email(self) -> str:
+        return self._email
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def hashed_password(self) -> str:
+        return self._hashed_password
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
+
+    @property
+    def role(self) -> str:
+        return self._role
+
+    def set_name(self, name: str) -> None:
+        if not name or len(name) > 100:
+            raise ValueError("Name must be non-empty and less than 100 characters")
+        self._name = name
+
+    def set_email(self, email: str) -> None:
+        if not isinstance(email, str) or "@" not in email:
+            raise ValueError("Invalid email format")
+        self._email = email
+
+    def set_role(self, role: str) -> None:
+        if role not in ["user", "admin"]:
+            raise ValueError("Role must be either 'user' or 'admin'")
+        self._role = role
+```
+
+## Пустая директория: services\user-service\app\domain\ports
+[Папка не содержит файлов]
+
+## Файл: services\user-service\app\domain\ports\inbound\admin_usecase_port.py
+```text
+from abc import ABC, abstractmethod
+from typing import Optional
+from uuid import UUID
+from application.dto.user_dto import CreateUserDTO, UpdateUserDTO, UserIdDTO, UserResponseDTO
+
+class AdminUseCasePort(ABC):
+    @abstractmethod
+    async def create_user(self, user_dto: CreateUserDTO, request_id: str) -> UserResponseDTO: ...
+
+    @abstractmethod
+    async def get_user(self, user_id_dto: UserIdDTO, request_id: str) -> Optional[UserResponseDTO]: ...
+
+    @abstractmethod
+    async def update_user(self, user_id: UUID, user_dto: UpdateUserDTO, request_id: str) -> Optional[UserResponseDTO]: ...
+
+    @abstractmethod
+    async def delete_user(self, user_id_dto: UserIdDTO, request_id: str) -> bool: ...
+```
+
+## Файл: services\user-service\app\domain\ports\inbound\user_service_port.py
+```text
+from abc import ABC, abstractmethod
+from typing import Optional
+from uuid import UUID
+from application.dto.user_dto import LoginDTO, UserIdDTO, UpdateNameDTO, UserResponseDTO
+
+class UserServicePort(ABC):
+    @abstractmethod
+    async def login(self, login_dto: LoginDTO, request_id: str) -> str: ...
+
+    @abstractmethod
+    async def get_my_profile(self, user_id_dto: UserIdDTO, request_id: str) -> Optional[UserResponseDTO]: ...
+
+    @abstractmethod
+    async def update_my_name(self, user_id: UUID, name_dto: UpdateNameDTO, request_id: str) -> Optional[UserResponseDTO]: ...
+```
+
+## Файл: services\user-service\app\domain\ports\outbound\base_repository.py
+```text
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar, Optional
+
+T = TypeVar("T")
+ID = TypeVar("ID")
+
+class AbstractRepository(ABC, Generic[T, ID]):
+    @abstractmethod
+    async def get_by_id(self, id: ID, request_id: str) -> Optional[T]: ...
+
+    @abstractmethod
+    async def create(self, entity: T, request_id: str) -> T: ...
+
+    @abstractmethod
+    async def update(self, entity: T, request_id: str) -> T: ...
+
+    @abstractmethod
+    async def delete(self, id: ID, request_id: str) -> None: ...
+```
+
+## Файл: services\user-service\app\domain\ports\outbound\cache_port.py
+```text
+from abc import ABC, abstractmethod
+from typing import Optional, Any
+
+class CachePort(ABC):
+    @abstractmethod
+    async def get(self, key: str) -> Optional[Any]:
+        """Получить значение из кэша по ключу."""
+        pass
+
+    @abstractmethod
+    async def set(self, key: str, value: Any, ttl: int) -> None:
+        """Установить значение в кэш с указанным TTL."""
+        pass
+
+    @abstractmethod
+    async def delete(self, key: str) -> None:
+        """Удалить значение из кэша по ключу."""
+        pass
+```
+
+## Файл: services\user-service\app\domain\ports\outbound\user_repository_port.py
+```text
+from abc import abstractmethod
+from typing import Optional
+from uuid import UUID
+from domain.models.user import User
+from domain.ports.outbound.base_repository import AbstractRepository
+
+class UserRepositoryPort(AbstractRepository[User, UUID]):
+    @abstractmethod
+    async def get_by_email(self, email: str, request_id: str) -> Optional[User]: ...
+```
+
+## Пустая директория: services\user-service\app\infrastructure
+[Папка не содержит файлов]
+
+## Пустая директория: services\user-service\app\infrastructure\adapters
+[Папка не содержит файлов]
+
+## Пустая директория: services\user-service\app\infrastructure\adapters\inbound
+[Папка не содержит файлов]
+
+## Файл: services\user-service\app\infrastructure\adapters\inbound\grpc\grpc_server.py
+```text
+import grpc
+import asyncio
+import jwt
+from grpc.aio import server as aio_server
+from grpc_reflection.v1alpha import reflection
+from uuid import UUID
+from functools import wraps
+from dishka import AsyncContainer
+from config import settings
+from infrastructure.di.container import get_container
+from application.user_service_impl import UserService
+from application.admin_service_impl import AdminService
+from application.dto.user_dto import CreateUserDTO, UpdateUserDTO, UserIdDTO, LoginDTO, UpdateNameDTO
+from application.utils.logging_utils import generate_request_id, log_execution_time, filter_sensitive_data
+from application.utils.grpc_utils import handle_grpc_exceptions
+from domain.exceptions import AuthenticationError, InvalidInputError
+from . import user_pb2_grpc, user_pb2
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+SERVICE_NAMES = (
+    user_pb2.DESCRIPTOR.services_by_name['AdminService'].full_name,
+    user_pb2.DESCRIPTOR.services_by_name['UserService'].full_name,
+    reflection.SERVICE_NAME,
+)
+
+def jwt_auth_middleware(func):
+    """Декоратор для проверки JWT-токена и извлечения user_id."""
+    @wraps(func)
+    async def wrapper(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        metadata = dict(context.invocation_metadata())
+        token = metadata.get('authorization')
+        if not token:
+            logger.error("No authorization token provided")
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details("Authorization token required")
+            raise AuthenticationError("Authorization token required")
+        try:
+            payload = jwt.decode(token.replace("Bearer ", ""), settings.jwt_secret_key, algorithms=["HS256"])
+            user_id = UUID(payload['user_id'])
+        except (jwt.InvalidTokenError, KeyError) as e:
+            logger.error("Invalid JWT token", error=str(e))
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details(f"Invalid JWT token: {str(e)}")
+            raise AuthenticationError(f"Invalid JWT token: {str(e)}")
+        return await func(self, request, context, request_id, user_id)
+    return wrapper
+
+def admin_auth_middleware(func):
+    """Декоратор для проверки роли admin в JWT-токене."""
+    @wraps(func)
+    async def wrapper(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        metadata = dict(context.invocation_metadata())
+        token = metadata.get('authorization')
+        if not token:
+            logger.error("No authorization token provided")
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details("Authorization token required")
+            raise AuthenticationError("Authorization token required")
+        try:
+            payload = jwt.decode(token.replace("Bearer ", ""), settings.jwt_secret_key, algorithms=["HS256"])
+            if payload.get('role') != 'admin':
+                logger.error("User is not an admin", user_id=payload.get('user_id'))
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                context.set_details("Admin access required")
+                raise AuthenticationError("Admin access required")
+        except jwt.InvalidTokenError as e:
+            logger.error("Invalid JWT token", error=str(e))
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details(f"Invalid JWT token: {str(e)}")
+            raise AuthenticationError(f"Invalid JWT token: {str(e)}")
+        return await func(self, request, context, request_id)
+    return wrapper
+
+def response_to_dict(response):
+    """Преобразует gRPC-ответ в словарь для логирования."""
+    if isinstance(response, user_pb2.UserResponse):
+        return {
+            "id": response.id,
+            "email": response.email,
+            "name": response.name,
+            "created_at": response.created_at,
+        }
+    elif isinstance(response, user_pb2.LoginResponse):
+        return {"token": response.token}
+    elif isinstance(response, user_pb2.UserDeletedResponse):
+        return {"success": response.success}
+    return response.__dict__
+
+class AdminServiceGRPC(user_pb2_grpc.AdminServiceServicer):
+    def __init__(self, container: AsyncContainer):
+        self.container = container
+        self.logger = logger.bind(service="AdminServiceGRPC")
+
+    async def _get_admin_service(self):
+        return await self.container.get(AdminService)
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    #@admin_auth_middleware
+    async def CreateUser(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        input_data = CreateUserDTO(email=request.email, name=request.name, password=request.password)
+        logger.info("Обработка запроса CreateUser", input_data=filter_sensitive_data(input_data.dict()))
+        admin_service = await self._get_admin_service()
+        user = await admin_service.create_user(input_data, request_id)
+        response = user_pb2.UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at.isoformat(),
+        )
+        logger.info("Запрос CreateUser завершен", response=response_to_dict(response))
+        return response
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    @admin_auth_middleware
+    async def GetUser(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            input_data = UserIdDTO(id=UUID(request.id))
+        except ValueError as e:
+            logger.error("Invalid UUID format", id=request.id)
+            raise InvalidInputError(f"Invalid UUID format: {request.id}")
+        logger.info("Обработка запроса GetUser", input_data=input_data.dict())
+        admin_service = await self._get_admin_service()
+        user = await admin_service.get_user(input_data, request_id)
+        response = user_pb2.UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at.isoformat(),
+        )
+        logger.info("Запрос GetUser завершен", response=response_to_dict(response))
+        return response
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    @admin_auth_middleware
+    async def UpdateUser(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            user_id = UUID(request.id)
+        except ValueError as e:
+            logger.error("Invalid UUID format", id=request.id)
+            raise InvalidInputError(f"Invalid UUID format: {request.id}")
+        input_data = UpdateUserDTO(email=request.email, name=request.name)
+        logger.info("Обработка запроса UpdateUser", input_data=input_data.dict(), user_id=str(user_id))
+        admin_service = await self._get_admin_service()
+        user = await admin_service.update_user(user_id, input_data, request_id)
+        response = user_pb2.UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at.isoformat(),
+        )
+        logger.info("Запрос UpdateUser завершен", response=response_to_dict(response))
+        return response
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    @admin_auth_middleware
+    async def DeleteUser(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            input_data = UserIdDTO(id=UUID(request.id))
+        except ValueError as e:
+            logger.error("Invalid UUID format", id=request.id)
+            raise InvalidInputError(f"Invalid UUID format: {request.id}")
+        logger.info("Обработка запроса DeleteUser", input_data=input_data.dict())
+        admin_service = await self._get_admin_service()
+        success = await admin_service.delete_user(input_data, request_id)
+        response = user_pb2.UserDeletedResponse(success=success)
+        logger.info("Запрос DeleteUser завершен", response=response_to_dict(response))
+        return response
+
+class UserServiceGRPC(user_pb2_grpc.UserServiceServicer):
+    def __init__(self, container: AsyncContainer):
+        self.container = container
+        self.logger = logger.bind(service="UserServiceGRPC")
+
+    async def _get_user_service(self):
+        return await self.container.get(UserService)
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    async def Login(self, request, context, request_id: str):
+        logger = self.logger.bind(request_id=request_id)
+        input_data = LoginDTO(email=request.email, password=request.password)
+        logger.info("Обработка запроса Login", input_data=filter_sensitive_data({"email": input_data.email}))
+        user_service = await self._get_user_service()
+        token = await user_service.login(input_data, request_id)
+        response = user_pb2.LoginResponse(token=token)
+        logger.info("Запрос Login завершен", response=response_to_dict(response))
+        return response
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    @jwt_auth_middleware
+    async def GetMyProfile(self, request, context, request_id: str, user_id: UUID):
+        logger = self.logger.bind(request_id=request_id)
+        input_data = UserIdDTO(id=user_id)
+        logger.info("Обработка запроса GetMyProfile", input_data=input_data.dict())
+        user_service = await self._get_user_service()
+        user = await user_service.get_my_profile(input_data, request_id)
+        response = user_pb2.UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at.isoformat(),
+        )
+        logger.info("Запрос GetMyProfile завершен", response=response_to_dict(response))
+        return response
+
+    @log_execution_time
+    @handle_grpc_exceptions
+    @jwt_auth_middleware
+    async def UpdateMyName(self, request, context, request_id: str, user_id: UUID):
+        logger = self.logger.bind(request_id=request_id)
+        input_data = UpdateNameDTO(name=request.name)
+        logger.info("Обработка запроса UpdateMyName", input_data=input_data.dict(), user_id=str(user_id))
+        user_service = await self._get_user_service()
+        user = await user_service.update_my_name(user_id, input_data, request_id)
+        response = user_pb2.UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at.isoformat(),
+        )
+        logger.info("Запрос UpdateMyName завершен", response=response_to_dict(response))
+        return response
+
+async def serve():
+    try:
+        container = await get_container()
+        async with container():
+            server = aio_server()
+            user_pb2_grpc.add_AdminServiceServicer_to_server(AdminServiceGRPC(container), server)
+            user_pb2_grpc.add_UserServiceServicer_to_server(UserServiceGRPC(container), server)
+            reflection.enable_server_reflection(SERVICE_NAMES, server)
+            server.add_insecure_port(f"[::]:{settings.grpc_port}")
+            logger.info(f"Сервер запущен на [::]:{settings.grpc_port} с включенной рефлексией")
+            await server.start()
+            await server.wait_for_termination()
+    except Exception as e:
+        logger.error(f"Не удалось запустить сервер: {e}")
+```
+
+## Пустая директория: services\user-service\app\infrastructure\adapters\outbound
+[Папка не содержит файлов]
+
+## Файл: services\user-service\app\infrastructure\adapters\outbound\mongo\user_repository.py
+```text
+from pymongo.collection import Collection
+from pymongo.errors import DuplicateKeyError
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
+from bson.binary import Binary, UUID_SUBTYPE
+from domain.models.user import User
+from domain.ports.outbound.user_repository_port import UserRepositoryPort
+from domain.ports.outbound.cache_port import CachePort
+from domain.exceptions import InvalidInputError
+from application.utils.logging_utils import log_execution_time
+from application.dto.user_dto import UserResponseDTO
+from structlog import get_logger
+from config import settings
+
+logger = get_logger(__name__)
+
+
+class MongoUserRepository(UserRepositoryPort):
+    def __init__(self, collection: Collection, cache: CachePort):
+        self.collection = collection
+        self.cache = cache
+        self.logger = logger.bind(repository="MongoUserRepository")
+
+    def _user_to_dict(self, user: User) -> dict:
+        """Преобразует объект User в словарь для MongoDB. Поле id (UUID) сохраняется как Binary UUID."""
+        return {
+            "_id": Binary(user.id.bytes, UUID_SUBTYPE),  # Сохраняем UUID как Binary
+            "email": user.email,
+            "name": user.name,
+            "hashed_password": user.hashed_password,
+            "created_at": user.created_at,
+            "role": user.role
+        }
+
+    def _user_to_cache_dto(self, user: User) -> UserResponseDTO:
+        """Преобразует объект User в DTO для кэширования."""
+        return UserResponseDTO(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at,
+            role=user.role
+        )
+
+    def _dict_to_user(self, data: dict) -> User:
+        """Преобразует словарь (из MongoDB или кэша) в объект User."""
+        created_at = data["created_at"]
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+
+        # Обрабатываем _id в зависимости от типа
+        _id = data["_id"]
+        if isinstance(_id, UUID):
+            user_id = _id  # Уже UUID из кэша
+        elif isinstance(_id, Binary):
+            user_id = UUID(bytes=_id)  # Binary UUID из MongoDB
+        else:
+            user_id = UUID(_id)  # Строка UUID (для обратной совместимости)
+
+        return User(
+            id=user_id,
+            email=data["email"],
+            name=data["name"],
+            hashed_password=data["hashed_password"],
+            created_at=created_at,
+            role=data.get("role", "user")
+        )
+
+    @log_execution_time
+    async def create(self, user: User, request_id: str) -> User:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            user_dict = self._user_to_dict(user)
+            logger.info("Создание пользователя в MongoDB", user_id=str(user.id))
+            await self.collection.insert_one(user_dict)
+            logger.info("Пользователь создан в MongoDB", user_id=str(user.id))
+            # Кэшируем пользователя с помощью DTO
+            cache_dto = self._user_to_cache_dto(user)
+            cache_data = cache_dto.model_dump(mode="json")  # Используем mode="json" для сериализации
+            cache_data["hashed_password"] = user.hashed_password
+            await self.cache.set(f"user:id:{user.id}", cache_data, settings.redis_ttl)
+            await self.cache.set(f"user:email:{user.email}", cache_data, settings.redis_ttl)
+            logger.info("Пользователь закэширован", user_id=str(user.id))
+            return user
+        except DuplicateKeyError as e:
+            logger.error("Дублирующийся email в MongoDB", error=str(e), email=user.email)
+            raise InvalidInputError(f"Email {user.email} уже существует")
+        except Exception as e:
+            logger.error("Не удалось создать пользователя в MongoDB", error=str(e), user_id=str(user.id))
+            raise
+
+    @log_execution_time
+    async def get_by_id(self, user_id: UUID, request_id: str) -> Optional[User]:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            # Проверяем кэш
+            cache_key = f"user:id:{user_id}"
+            cached = await self.cache.get(cache_key)
+            if cached:
+                logger.info("Пользователь получен из кэша", user_id=str(user_id))
+                # Десериализуем кэш в DTO
+                cache_dto = UserResponseDTO.parse_obj(cached)
+                return self._dict_to_user({
+                    "_id": cache_dto.id,  # id из DTO уже UUID
+                    "email": cache_dto.email,
+                    "name": cache_dto.name,
+                    "created_at": cache_dto.created_at,
+                    "hashed_password": cached["hashed_password"],
+                    "role": cache_dto.role
+                })
+
+            logger.info("Получение пользователя по ID из MongoDB", user_id=str(user_id))
+            data = await self.collection.find_one({"_id": Binary(user_id.bytes, UUID_SUBTYPE)})
+            if data:
+                user = self._dict_to_user(data)
+                # Кэшируем результат с помощью DTO
+                cache_dto = self._user_to_cache_dto(user)
+                cache_data = cache_dto.model_dump(mode="json")
+                cache_data["hashed_password"] = user.hashed_password
+                await self.cache.set(cache_key, cache_data, settings.redis_ttl)
+                logger.info("Пользователь получен и закэширован", user_id=str(user_id))
+                return user
+            logger.warning("Пользователь не найден в MongoDB", user_id=str(user_id))
+            return None
+        except Exception as e:
+            logger.error("Не удалось получить пользователя по ID", error=str(e), user_id=str(user_id))
+            raise
+
+    @log_execution_time
+    async def get_by_email(self, email: str, request_id: str) -> Optional[User]:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            # Проверяем кэш
+            cache_key = f"user:email:{email}"
+            cached = await self.cache.get(cache_key)
+            if cached:
+                logger.info("Пользователь получен из кэша", email=email)
+                # Десериализуем кэш в DTO
+                cache_dto = UserResponseDTO.parse_obj(cached)
+                return self._dict_to_user({
+                    "_id": cache_dto.id,  # id из DTO уже UUID
+                    "email": cache_dto.email,
+                    "name": cache_dto.name,
+                    "created_at": cache_dto.created_at,
+                    "hashed_password": cached["hashed_password"],
+                    "role": cache_dto.role
+                })
+
+            logger.info("Получение пользователя по email из MongoDB", email=email)
+            data = await self.collection.find_one({"email": email})
+            if data:
+                user = self._dict_to_user(data)
+                # Кэшируем результат с помощью DTO
+                cache_dto = self._user_to_cache_dto(user)
+                cache_data = cache_dto.model_dump(mode="json")
+                cache_data["hashed_password"] = user.hashed_password
+                await self.cache.set(cache_key, cache_data, settings.redis_ttl)
+                logger.info("Пользователь получен и закэширован", email=email)
+                return user
+            logger.warning("Пользователь не найден по email в MongoDB", email=email)
+            return None
+        except Exception as e:
+            logger.error("Не удалось получить пользователя по email", error=str(e), email=email)
+            raise
+
+    @log_execution_time
+    async def update(self, user: User, request_id: str) -> User:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            user_dict = self._user_to_dict(user)
+            logger.info("Обновление пользователя в MongoDB", user_id=str(user.id))
+            await self.collection.replace_one({"_id": Binary(user.id.bytes, UUID_SUBTYPE)}, user_dict)
+            logger.info("Пользователь обновлен в MongoDB", user_id=str(user.id))
+            # Инвалидируем кэш
+            await self.cache.delete(f"user:id:{user.id}")
+            await self.cache.delete(f"user:email:{user.email}")
+            # Кэшируем обновленные данные с помощью DTO
+            cache_dto = self._user_to_cache_dto(user)
+            cache_data = cache_dto.model_dump(mode="json")
+            cache_data["hashed_password"] = user.hashed_password
+            await self.cache.set(f"user:id:{user.id}", cache_data, settings.redis_ttl)
+            await self.cache.set(f"user:email:{user.email}", cache_data, settings.redis_ttl)
+            logger.info("Пользователь закэширован", user_id=str(user.id))
+            return user
+        except DuplicateKeyError as e:
+            logger.error("Дублирующийся email в MongoDB", error=str(e), email=user.email)
+            raise InvalidInputError(f"Email {user.email} уже существует")
+        except Exception as e:
+            logger.error("Не удалось обновить пользователя в MongoDB", error=str(e), user_id=str(user.id))
+            raise
+
+    @log_execution_time
+    async def delete(self, user_id: UUID, request_id: str) -> None:
+        logger = self.logger.bind(request_id=request_id)
+        try:
+            logger.info("Удаление пользователя из MongoDB", user_id=str(user_id))
+            user = await self.get_by_id(user_id, request_id)
+            await self.collection.delete_one({"_id": Binary(user_id.bytes, UUID_SUBTYPE)})
+            logger.info("Пользователь удален из MongoDB", user_id=str(user_id))
+            # Инвалидируем кэш
+            if user:
+                await self.cache.delete(f"user:id:{user_id}")
+                await self.cache.delete(f"user:email:{user.email}")
+        except Exception as e:
+            logger.error("Не удалось удалить пользователя из MongoDB", error=str(e), user_id=str(user_id))
+            raise
+```
+
+## Файл: services\user-service\app\infrastructure\adapters\outbound\redis\cache_repository.py
+```text
+import json
+from typing import Optional, Any
+from redis.asyncio import Redis
+from domain.ports.outbound.cache_port import CachePort
+from structlog import get_logger
+from application.utils.logging_utils import log_execution_time
+
+logger = get_logger(__name__)
+
+class RedisCacheRepository(CachePort):
+    def __init__(self, redis_client: Redis):
+        self.redis = redis_client
+        self.logger = logger.bind(repository="RedisCacheRepository")
+
+    @log_execution_time
+    async def get(self, key: str) -> Optional[Any]:
+        logger = self.logger.bind(key=key)
+        try:
+            value = await self.redis.get(key)
+            if value:
+                logger.info("Кэш найден", key=key)
+                return json.loads(value)
+            logger.info("Кэш не найден", key=key)
+            return None
+        except Exception as e:
+            logger.error("Ошибка при получении из кэша", error=str(e), key=key)
+            raise
+
+    @log_execution_time
+    async def set(self, key: str, value: Any, ttl: int) -> None:
+        logger = self.logger.bind(key=key)
+        try:
+            await self.redis.setex(key, ttl, json.dumps(value))
+            logger.info("Значение установлено в кэш", key=key, ttl=ttl)
+        except Exception as e:
+            logger.error("Ошибка при установке в кэш", error=str(e), key=key)
+            raise
+
+    @log_execution_time
+    async def delete(self, key: str) -> None:
+        logger = self.logger.bind(key=key)
+        try:
+            await self.redis.delete(key)
+            logger.info("Значение удалено из кэша", key=key)
+        except Exception as e:
+            logger.error("Ошибка при удалении из кэша", error=str(e), key=key)
+            raise
+```
+
+## Файл: services\user-service\app\infrastructure\di\container.py
+```text
+from dishka import Provider, Scope, provide, make_async_container, AsyncContainer
+from pymongo import AsyncMongoClient
+from pymongo.collection import Collection
+from redis.asyncio import Redis
+from infrastructure.adapters.outbound.mongo.user_repository import MongoUserRepository
+from infrastructure.adapters.outbound.redis.cache_repository import RedisCacheRepository
+from application.user_service_impl import UserService
+from application.admin_service_impl import AdminService
+from domain.ports.outbound.user_repository_port import UserRepositoryPort
+from domain.ports.outbound.cache_port import CachePort
+from config import settings
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class AppProvider(Provider):
+    """Провайдер зависимостей для приложения."""
+
+    @provide(scope=Scope.APP)
+    async def get_mongo_client(self) -> AsyncMongoClient:
+        client = AsyncMongoClient(settings.mongo_uri, uuidRepresentation=settings.mongo_uuid_representation)
+        logger.info("Клиент MongoDB инициализирован")
+        return client
+
+    @provide(scope=Scope.APP)
+    async def get_mongo_collection(self, client: AsyncMongoClient) -> Collection:
+        db = client[settings.mongo_db]
+        collection = db["users"]
+        # Удаляем создание индекса для _id, так как он создается автоматически
+        await collection.create_index("email", unique=True)
+        logger.info("Коллекция MongoDB инициализирована")
+        return collection
+
+    @provide(scope=Scope.APP)
+    async def get_redis_client(self) -> Redis:
+        client = Redis.from_url(settings.redis_uri, decode_responses=True)
+        logger.info("Клиент Redis инициализирован")
+        return client
+
+    @provide(scope=Scope.APP)
+    async def get_cache_repository(self, redis_client: Redis) -> CachePort:
+        logger.info("Репозиторий кэша Redis инициализирован")
+        return RedisCacheRepository(redis_client)
+
+    @provide(scope=Scope.APP)
+    async def get_user_repository(self, collection: Collection, cache: CachePort) -> UserRepositoryPort:
+        logger.info("Репозиторий пользователей инициализирован")
+        return MongoUserRepository(collection, cache)
+
+    @provide(scope=Scope.APP)
+    async def get_user_service(self, repo: UserRepositoryPort) -> UserService:
+        logger.info("Сервис пользователей инициализирован")
+        return UserService(repo, settings.jwt_secret_key)
+
+    @provide(scope=Scope.APP)
+    async def get_admin_service(self, repo: UserRepositoryPort) -> AdminService:
+        logger.info("Админский сервис инициализирован")
+        return AdminService(repo)
+
+async def get_container() -> AsyncContainer:
+    container = make_async_container(AppProvider())
+    logger.info("Асинхронный контейнер создан")
+    return container
+```
+

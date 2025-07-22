@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.egg-info/
+build/
+dist/
+*.egg
+
+# Виртуальные окружения
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp
+*~
+.#*
+
+# Файлы редакторов
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Сгенерированные файлы gRPC
+services/user-service/app/infrastructure/adapters/inbound/grpc/*_pb2.py
+services/user-service/app/infrastructure/adapters/inbound/grpc/*_pb2_grpc.py
+
+# Файлы окружения
+services/user-service/.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Docker
+docker-compose.override.yml
+mongo-data/
+redis-data/
+*.dockerignore
+
+# Тестовые файлы
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+tox/
+nox/
+*.tox/
+
+# Локальные директории и файлы
+.git/
+README.md
+LICENSE
+docs/
+tests/
+*.md
+
+# macOS and Windows
+*.DS_Store
+Thumbs.db
