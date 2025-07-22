@@ -26,7 +26,6 @@ class AppProvider(Provider):
         db = client[settings.mongo_db]
         collection = db["auth_users"]
         await collection.create_index("email", unique=True)
-        await collection.create_index("telegram_id", unique=True)
         logger.info("MongoDB collection initialized")
         return collection
 
