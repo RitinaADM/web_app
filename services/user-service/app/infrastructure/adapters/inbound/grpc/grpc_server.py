@@ -100,7 +100,7 @@ class AdminServiceGRPC(user_pb2_grpc.AdminServiceServicer):
 
     @log_execution_time
     @handle_grpc_exceptions
-    #@admin_auth_middleware
+    @admin_auth_middleware
     async def CreateUser(self, request, context, request_id: str):
         logger = self.logger.bind(request_id=request_id)
         input_data = CreateUserDTO(email=request.email, name=request.name, password=request.password)
