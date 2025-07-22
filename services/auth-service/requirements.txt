@@ -6,6 +6,8 @@ pydantic[email]==2.7.0
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 pyjwt==2.8.0
+bcrypt==4.1.2
 dishka==1.6.0
 structlog==24.4.0
 redis==5.0.8
+google-auth==2.23.0

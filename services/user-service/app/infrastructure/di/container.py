@@ -14,50 +14,47 @@ from structlog import get_logger
 logger = get_logger(__name__)
 
 class AppProvider(Provider):
-    """Провайдер зависимостей для приложения."""
-
     @provide(scope=Scope.APP)
     async def get_mongo_client(self) -> AsyncMongoClient:
         client = AsyncMongoClient(settings.mongo_uri, uuidRepresentation=settings.mongo_uuid_representation)
-        logger.info("Клиент MongoDB инициализирован")
+        logger.info("MongoDB client initialized")
         return client
 
     @provide(scope=Scope.APP)
     async def get_mongo_collection(self, client: AsyncMongoClient) -> Collection:
         db = client[settings.mongo_db]
         collection = db["users"]
-        # Удаляем создание индекса для _id, так как он создается автоматически
-        await collection.create_index("email", unique=True)
-        logger.info("Коллекция MongoDB инициализирована")
+        await collection.create_index("name")  # Добавляем индекс для поля name
+        logger.info("MongoDB collection initialized")
         return collection
 
     @provide(scope=Scope.APP)
     async def get_redis_client(self) -> Redis:
         client = Redis.from_url(settings.redis_uri, decode_responses=True)
-        logger.info("Клиент Redis инициализирован")
+        logger.info("Redis client initialized")
         return client
 
     @provide(scope=Scope.APP)
     async def get_cache_repository(self, redis_client: Redis) -> CachePort:
-        logger.info("Репозиторий кэша Redis инициализирован")
+        logger.info("Redis cache repository initialized")
         return RedisCacheRepository(redis_client)
 
     @provide(scope=Scope.APP)
     async def get_user_repository(self, collection: Collection, cache: CachePort) -> UserRepositoryPort:
-        logger.info("Репозиторий пользователей инициализирован")
+        logger.info("User repository initialized")
         return MongoUserRepository(collection, cache)
 
     @provide(scope=Scope.APP)
     async def get_user_service(self, repo: UserRepositoryPort) -> UserService:
-        logger.info("Сервис пользователей инициализирован")
-        return UserService(repo, settings.jwt_secret_key)
+        logger.info("User service initialized")
+        return UserService(repo)
 
     @provide(scope=Scope.APP)
     async def get_admin_service(self, repo: UserRepositoryPort) -> AdminService:
-        logger.info("Админский сервис инициализирован")
+        logger.info("Admin service initialized")
         return AdminService(repo)
 
 async def get_container() -> AsyncContainer:
     container = make_async_container(AppProvider())
-    logger.info("Асинхронный контейнер создан")
+    logger.info("Async container created")
     return container

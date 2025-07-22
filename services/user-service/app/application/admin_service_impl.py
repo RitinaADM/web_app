@@ -1,13 +1,12 @@
-import bcrypt
-from uuid import UUID, uuid4
+from uuid import UUID
 from datetime import datetime
 from typing import Optional
 from domain.ports.inbound.admin_usecase_port import AdminUseCasePort
 from domain.ports.outbound.user_repository_port import UserRepositoryPort
-from domain.models.user import User
+from shared.domain.models.user import User  # Изменяем импорт
 from domain.exceptions import UserNotFoundError, InvalidInputError
 from application.dto.user_dto import CreateUserDTO, UpdateUserDTO, UserIdDTO, UserResponseDTO
-from application.utils.logging_utils import log_execution_time, filter_sensitive_data
+from application.utils.logging_utils import log_execution_time
 from structlog import get_logger
 
 logger = get_logger(__name__)
@@ -17,44 +16,31 @@ class AdminService(AdminUseCasePort):
         self.repo = repo
         self.logger = logger.bind(service="AdminService")
 
-    def _hash_password(self, password: str) -> str:
-        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
     @log_execution_time
     async def create_user(self, user_dto: CreateUserDTO, request_id: str) -> UserResponseDTO:
         logger = self.logger.bind(request_id=request_id)
         try:
-            # Проверяем, существует ли пользователь с таким email
-            existing_user = await self.repo.get_by_email(user_dto.email, request_id)
-            if existing_user:
-                logger.error("Email already exists", email=user_dto.email)
-                raise InvalidInputError(f"Email {user_dto.email} уже существует")
-
-            # Назначаем роль: admin для определённых email, иначе user
-            role = "admin" if user_dto.email == "admin@example.com" else "user"
-            logger.info("Creating user", input_data=filter_sensitive_data(user_dto.dict()), role=role)
+            logger.info("Creating user", input_data=user_dto.dict())
             user = User(
-                id=uuid4(),
-                email=user_dto.email,
+                id=user_dto.id,
                 name=user_dto.name,
-                hashed_password=self._hash_password(user_dto.password),
                 created_at=datetime.utcnow(),
-                role=role
+                role=user_dto.role
             )
             created_user = await self.repo.create(user, request_id)
             response = UserResponseDTO(
                 id=created_user.id,
-                email=created_user.email,
                 name=created_user.name,
-                created_at=created_user.created_at
+                created_at=created_user.created_at,
+                role=created_user.role
             )
             logger.info("User created successfully", user_id=str(user.id), response=response.dict())
             return response
         except InvalidInputError as e:
-            logger.error("Invalid input for creating user", error=str(e), email=user_dto.email)
+            logger.error("Invalid input for creating user", error=str(e))
             raise
         except Exception as e:
-            logger.error("Unexpected error in creating user", error=str(e), email=user_dto.email)
+            logger.error("Unexpected error in creating user", error=str(e))
             raise RuntimeError(f"Unexpected error in creating user: {str(e)}")
 
     @log_execution_time
@@ -68,9 +54,9 @@ class AdminService(AdminUseCasePort):
                 raise UserNotFoundError(f"User with ID {user_id_dto.id} not found")
             response = UserResponseDTO(
                 id=user.id,
-                email=user.email,
                 name=user.name,
-                created_at=user.created_at
+                created_at=user.created_at,
+                role=user.role
             )
             logger.info("User fetched successfully", response=response.dict())
             return response
@@ -94,13 +80,12 @@ class AdminService(AdminUseCasePort):
                 logger.warning("User not found", user_id=str(user_id))
                 raise UserNotFoundError(f"User with ID {user_id} not found")
             user.set_name(user_dto.name)
-            user.set_email(user_dto.email)
             updated_user = await self.repo.update(user, request_id)
             response = UserResponseDTO(
                 id=updated_user.id,
-                email=updated_user.email,
                 name=updated_user.name,
-                created_at=updated_user.created_at
+                created_at=updated_user.created_at,
+                role=updated_user.role
             )
             logger.info("User updated successfully", response=response.dict())
             return response

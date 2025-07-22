@@ -33,6 +33,7 @@ logs/
 
 # Файлы окружения
 services/user-service/.env
+services/auth-service/.env
 *.env.local
 *.env.development
 *.env.test
@@ -64,6 +65,7 @@ LICENSE
 docs/
 tests/
 *.md
+"dev_tools/",
 
 # macOS and Windows
 *.DS_Store
